@@ -1,0 +1,84 @@
+name: trading
+
+services:
+  app:
+    build: ./docker
+    container_name: trading_app
+    restart: "no"
+    working_dir: /var/www/html
+    environment:
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=trading
+      - DB_USERNAME=trading
+      - DB_PASSWORD=trading_secret
+      - REDIS_HOST=redis
+    volumes:
+      - ./:/var/www/html
+      - ./docker/php/zz-app.conf:/usr/local/etc/php-fpm.d/zz-app.conf:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: nginx:alpine
+    container_name: trading_web
+    restart: "no"
+    ports:
+      - "8051:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx:/etc/nginx/conf.d
+    depends_on:
+      - app
+
+  db:
+    image: mysql:8.0
+    container_name: trading_db
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_secret
+      MYSQL_DATABASE: trading
+      MYSQL_USER: trading
+      MYSQL_PASSWORD: trading_secret
+      TZ: UTC
+    volumes:
+      - trading_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot_secret"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: trading_redis
+    restart: "no"
+    volumes:
+      - trading_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: trading_phpmyadmin
+    restart: "no"
+    ports:
+      - "8052:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: root_secret
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      - db
+
+volumes:
+  trading_db_data:
+  trading_redis_data:
