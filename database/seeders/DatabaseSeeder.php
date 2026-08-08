@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Portfolio;
 use App\Models\RiskRule;
 use App\Models\Strategy;
+use App\Models\Trade;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -99,6 +100,18 @@ class DatabaseSeeder extends Seeder
                     'status' => 'active',
                 ]
             );
+        }
+
+        $strategyIds = Strategy::where('user_id', $user->id)->pluck('id')->all();
+
+        Trade::where('user_id', $user->id)->delete();
+
+        foreach (range(1, 35) as $i) {
+            Trade::factory()->create([
+                'user_id' => $user->id,
+                'portfolio_id' => $portfolio->id,
+                'strategy_id' => $strategyIds[array_rand($strategyIds)],
+            ]);
         }
     }
 }

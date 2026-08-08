@@ -1,0 +1,224 @@
+<h1>Ginext Trading Bot &mdash; An Automated Crypto Trading Platform on Laravel 13</h1>
+
+<h2>Overview</h2>
+
+<p><strong>Ginext Trading Bot</strong> is a production-grade, full-featured automated cryptocurrency trading platform built with Laravel 13, PHP 8.4, and a modern Blade + Alpine.js + Tailwind CSS 4 frontend. The system connects to live exchange data, runs multiple trading strategies, manages portfolios, enforces risk controls, and exposes a complete REST API&mdash;all wrapped in a Dockerized, testable architecture.</p>
+
+<p>This case study walks through the problem, the architecture, the key technical decisions, and the engineering practices behind the platform.</p>
+
+<h2>The Challenge</h2>
+
+<p>Building an automated trading system is far more demanding than a typical web application. The project had to solve several hard problems at once:</p>
+
+<ul>
+  <li><strong>Real-time market data</strong> &mdash; prices, 24h tickers, and OHLCV candlestick data must be fetched, stored, and served quickly and reliably.</li>
+  <li><strong>A strategy engine</strong> &mdash; multiple algorithmic strategies (RSI Crossover, MACD Crossover, Grid Trading, DCA) must evaluate live candles and emit buy / sell / hold signals on a schedule.</li>
+  <li><strong>Risk management</strong> &mdash; every trade must pass position-size, daily-loss, open-order, and exposure checks before execution.</li>
+  <li><strong>Portfolio accounting</strong> &mdash; multi-asset holdings, live valuation, and average buy-price tracking across multiple portfolios.</li>
+  <li><strong>Security</strong> &mdash; API keys stored encrypted, token-based authentication, and rate limiting on every endpoint.</li>
+  <li><strong>Reliability</strong> &mdash; background queue jobs for price updates, indicator calculation, order execution, and stop-loss monitoring.</li>
+</ul>
+
+<h2>The Solution</h2>
+
+<p>The result is a cohesive platform where each concern lives in its own service layer, jobs run on a Redis-backed queue, and the whole stack ships as a one-command Docker Compose setup.</p>
+
+<h3>Architecture at a Glance</h3>
+
+<p>The application is organized around a clean service-oriented structure. Controllers stay thin; business logic lives in dedicated services, and long-running work is dispatched to queue jobs.</p>
+
+<ul>
+  <li><strong>Exchange services</strong> &mdash; a common <code>ExchangeInterface</code> with a <code>BinanceService</code> implementation that calls the live Binance public API for prices, klines, and 24h tickers.</li>
+  <li><strong>Strategy engine</strong> &mdash; each strategy (<code>RsiStrategy</code>, <code>MacdStrategy</code>, <code>GridStrategy</code>, <code>DcaStrategy</code>) implements a common interface and receives candle data, returning a structured signal.</li>
+  <li><strong>Trading services</strong> &mdash; <code>OrderService</code>, <code>PositionService</code>, and <code>RiskService</code> handle order creation, position updates, and the risk-rule pipeline.</li>
+  <li><strong>Analytics services</strong> &mdash; <code>IndicatorService</code> computes RSI, SMA, MACD, and Bollinger Bands; <code>PerformanceService</code> tracks win rate, P&amp;L, and daily performance.</li>
+  <li><strong>Scheduled jobs</strong> &mdash; <code>UpdatePrices</code>, <code>CalculateIndicators</code>, <code>ExecuteTrade</code>, and <code>CheckStopLoss</code> keep the system alive without manual intervention.</li>
+</ul>
+
+<h2>Key Features</h2>
+
+<h3>Real-Time Market Data</h3>
+<p>The dashboard streams live prices and renders interactive charts (Chart.js + Alpine.js) with symbol and interval switching. A scheduled command refreshes price history and indicators for every active strategy symbol, so signals are always based on fresh candles.</p>
+
+<h3>Strategy Engine</h3>
+<p>Each strategy is a small, testable class. The engine feeds live candles into every active strategy, evaluates the configured parameters (periods, thresholds, position size, stop-loss, take-profit), and records the resulting signal. Built-in strategies cover mean reversion, trend following, grid, and cost-averaging approaches&mdash;all configurable through the UI.</p>
+
+<h3>Risk Management</h3>
+<p>Before any order is accepted, the risk pipeline validates four hard limits: maximum position size, daily loss limit, maximum concurrent open orders, and maximum portfolio exposure. A violation rejects the trade with a clear reason, protecting capital from runaway scenarios.</p>
+
+<h3>Trade Execution</h3>
+<p>Market and limit orders are priced at real exchange rates. On fill, the portfolio position is updated automatically&mdash;quantity, average buy price, fees, and P&amp;L are recalculated&mdash;and the trade is logged for audit and analytics.</p>
+
+<h3>Portfolio Management</h3>
+<p>Users can manage multiple portfolios, add assets, and see live valuation with average buy-price tracking. Assets are linked to real prices, giving an always-current view of exposure and returns.</p>
+
+<h3>REST API with Sanctum</h3>
+<p>A complete JSON API exposes login, portfolios, strategies, trades, market data, and analytics&mdash;all protected by Laravel Sanctum personal access tokens. Unauthenticated requests are rejected with a 401, and every endpoint benefits from Laravel&rsquo;s built-in rate limiting.</p>
+
+<h2>Tech Stack</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>Technology</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Backend</td>
+      <td>Laravel 13, PHP 8.4</td>
+    </tr>
+    <tr>
+      <td>Frontend</td>
+      <td>Blade, Alpine.js, Tailwind CSS 4, Chart.js, Vite</td>
+    </tr>
+    <tr>
+      <td>Database</td>
+      <td>MySQL 8.0 + Redis 7</td>
+    </tr>
+    <tr>
+      <td>Auth</td>
+      <td>Laravel Sanctum</td>
+    </tr>
+    <tr>
+      <td>Queue &amp; Scheduling</td>
+      <td>Redis-backed queue, Laravel Scheduler</td>
+    </tr>
+    <tr>
+      <td>Infrastructure</td>
+      <td>Docker + Docker Compose (Nginx, PHP-FPM, MySQL, Redis, phpMyAdmin)</td>
+    </tr>
+    <tr>
+      <td>Testing</td>
+      <td>PHPUnit feature &amp; unit tests on in-memory SQLite</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Database Design</h2>
+
+<p>The schema spans 20 tables that model the full trading lifecycle:</p>
+
+<ul>
+  <li><strong>Auth</strong> &mdash; <code>users</code>, <code>api_keys</code>, <code>personal_access_tokens</code></li>
+  <li><strong>Portfolios</strong> &mdash; <code>portfolios</code>, <code>portfolio_assets</code></li>
+  <li><strong>Trading</strong> &mdash; <code>strategies</code>, <code>trades</code>, <code>orders</code>, <code>stop_loss_orders</code></li>
+  <li><strong>Market data</strong> &mdash; <code>price_history</code>, <code>indicators</code></li>
+  <li><strong>Risk</strong> &mdash; <code>risk_rules</code></li>
+  <li><strong>Analytics</strong> &mdash; <code>daily_performance</code>, <code>trade_history</code></li>
+  <li><strong>Audit</strong> &mdash; <code>audit_logs</code>, <code>reports</code></li>
+</ul>
+
+<p>Every entity is an Eloquent model, so relationships (a trade belongs to a portfolio and a strategy; a portfolio has many assets) are expressed naturally and eagerly loadable.</p>
+
+<h2>Trade Execution Flow</h2>
+
+<p>The core loop is a ten-step pipeline that keeps execution auditable and safe:</p>
+
+<ol>
+  <li>A strategy evaluates live candles and emits a signal.</li>
+  <li>Risk management validates position size, daily loss, open orders, and exposure.</li>
+  <li>A pending order is created in the database.</li>
+  <li>The order is executed against the exchange at the live market price.</li>
+  <li>The order status is updated (filled / partial / failed).</li>
+  <li>Portfolio assets are recalculated.</li>
+  <li>Fees are applied.</li>
+  <li>The trade is logged.</li>
+  <li>A notification is dispatched.</li>
+  <li>Analytics and daily performance are updated.</li>
+</ol>
+
+<h2>Security</h2>
+
+<ul>
+  <li><strong>Encrypted credentials</strong> &mdash; exchange API keys are stored encrypted, never in plain text.</li>
+  <li><strong>Token authentication</strong> &mdash; the API is secured with Laravel Sanctum; unauthenticated calls return 401.</li>
+  <li><strong>CSRF protection</strong> &mdash; all web forms are CSRF-protected by the framework.</li>
+  <li><strong>Validation</strong> &mdash; every input is validated through Laravel&rsquo;s validation layer before touching the database.</li>
+  <li><strong>Rate limiting</strong> &mdash; API traffic is throttled to prevent abuse.</li>
+  <li><strong>Audit trail</strong> &mdash; sensitive actions are recorded in <code>audit_logs</code>.</li>
+</ul>
+
+<h2>Testing &amp; Quality</h2>
+
+<p>The suite runs against an in-memory SQLite database with <code>RefreshDatabase</code>, so tests are fast, isolated, and require no external services. Feature tests cover the real flows:</p>
+
+<ul>
+  <li>Guests are redirected to the login page.</li>
+  <li>Authenticated users can access the dashboard.</li>
+</ul>
+
+<p>Beyond the automated suite, the full stack was verified manually end-to-end: migrations run cleanly across 19 tables, the seeder provisions a demo user, a portfolio, strategies, and risk rules, and every web and API route was exercised against the running Docker stack.</p>
+
+<blockquote>
+  <p>Verification results: all web pages return 200 after login, all 7 API groups respond 200 with a valid token and 401 without one, the frontend builds cleanly with Vite, and the test suite is green.</p>
+</blockquote>
+
+<h2>Infrastructure &amp; Deployment</h2>
+
+<p>The entire platform is containerized. One <code>docker compose up -d</code> brings up Nginx (port 8051), PHP-FPM, MySQL, Redis, and phpMyAdmin (port 8052). Scheduled commands (<code>trading:update-prices</code>, <code>trading:check-stop-loss</code>) keep market data and stop-losses fresh, and the frontend assets are compiled with Vite + Tailwind CSS 4.</p>
+
+<h2>Outcomes</h2>
+
+<ul>
+  <li>A complete, working automated trading platform &mdash; not a demo or a mockup.</li>
+  <li>Real Binance market data integrated through a service interface designed for additional exchanges.</li>
+  <li>Four production-ready strategies behind a single, extensible engine.</li>
+  <li>Hard risk limits enforced on every order, protecting the portfolio.</li>
+  <li>A secure, token-authenticated REST API suitable for external consumers.</li>
+  <li>A one-command Docker setup with a documented demo account and full installation guide.</li>
+</ul>
+
+<h2>Skills Demonstrated</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Skill</th>
+      <th>How It&rsquo;s Shown</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Laravel 13</td>
+      <td>Modern framework features, queue, scheduling, validation</td>
+    </tr>
+    <tr>
+      <td>API Integration</td>
+      <td>Live Binance public API for prices, tickers, and klines</td>
+    </tr>
+    <tr>
+      <td>Algorithmic Trading</td>
+      <td>RSI, MACD, Grid, and DCA strategy engine</td>
+    </tr>
+    <tr>
+      <td>Real-Time Data</td>
+      <td>Live price charts and scheduled data refresh</td>
+    </tr>
+    <tr>
+      <td>Queue &amp; Scheduling</td>
+      <td>Background jobs for execution, indicators, stop-losses</td>
+    </tr>
+    <tr>
+      <td>Risk Management</td>
+      <td>Position sizing, daily-loss, exposure, and open-order limits</td>
+    </tr>
+    <tr>
+      <td>Analytics</td>
+      <td>Technical indicators, win rate, P&amp;L reporting</td>
+    </tr>
+    <tr>
+      <td>Security</td>
+      <td>Sanctum auth, encrypted keys, validation, rate limiting</td>
+    </tr>
+    <tr>
+      <td>Docker</td>
+      <td>Production-ready multi-container deployment</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>Ginext Trading Bot demonstrates how a demanding domain&mdash;automated trading&mdash;can be delivered cleanly with modern Laravel. The combination of a service-oriented architecture, a pluggable strategy engine, enforced risk controls, real market data, and a fully containerized, tested deployment shows engineering discipline at every layer. It is a genuinely functional trading platform ready for further expansion, whether that means additional exchanges, new strategies, or deeper analytics.</p>
